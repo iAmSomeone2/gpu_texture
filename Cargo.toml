@@ -1,0 +1,28 @@
+[package]
+name = "gpu_texture"
+version = "0.1.0"
+edition = "2024"
+
+[dev-dependencies]
+anyhow = "1.0.99"
+glium = "0.36.0"
+
+[dependencies]
+nom = "^8.0.0"
+bitflags = "^2.9.3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[features]
+default = ["dds", "ktx"]
+# DirectDraw Surface container file support
+dds = []
+# Khronos Texture container file support
+ktx = []
+
+[[example]]
+name = "load_dds_file"
+path = "examples/load_dds_file/main.rs"
+required-features = ["dds"]

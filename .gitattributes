@@ -1,0 +1,2 @@
+assets/*.dds filter=lfs diff=lfs merge=lfs -text
+assets/*.ktx filter=lfs diff=lfs merge=lfs -text
