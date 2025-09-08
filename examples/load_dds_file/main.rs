@@ -1,9 +1,13 @@
+mod geometry;
+mod material;
+mod mesh;
+
 use glium::glutin::surface::WindowSurface;
 use glium::texture::TextureFormat as GLTextureFormat;
 use glium::winit::event::WindowEvent;
 use glium::winit::event_loop::{ActiveEventLoop, ControlFlow};
 use glium::winit::window::{Window, WindowButtons, WindowId};
-use glium::{CapabilitiesSource, Display, Surface, winit};
+use glium::{CapabilitiesSource, Display, Surface, implement_vertex, winit};
 use std::collections::HashMap;
 
 #[derive(Default, Debug)]
@@ -13,12 +17,8 @@ struct App {
     display: Option<Display<WindowSurface>>,
 }
 
-impl winit::application::ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.did_initialize {
-            return;
-        }
-
+impl App {
+    fn initialize(&mut self, event_loop: &ActiveEventLoop) {
         let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
             .with_title("Example: Load DDS File")
             .with_inner_size(800, 800)
@@ -41,6 +41,14 @@ impl winit::application::ApplicationHandler for App {
         self.window = Some(window);
         self.display = Some(display);
         self.did_initialize = true;
+    }
+}
+
+impl winit::application::ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if !self.did_initialize {
+            self.initialize(event_loop);
+        }
     }
 
     fn window_event(
