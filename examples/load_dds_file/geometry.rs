@@ -4,15 +4,15 @@ use glium::{Display, implement_vertex};
 
 #[repr(C, align(32))]
 #[derive(Debug, Default, Copy, Clone)]
-struct Vertex {
+pub struct Vertex {
     position: [f32; 3],
     tex_coords: [f32; 2],
 }
 implement_vertex!(Vertex, position location(0), tex_coords location(1));
 
 pub struct Geometry {
-    vertex_buffer: glium::VertexBuffer<Vertex>,
-    index_buffer: glium::IndexBuffer<u16>,
+    pub vertex_buffer: glium::VertexBuffer<Vertex>,
+    pub index_buffer: glium::IndexBuffer<u16>,
 }
 
 impl Geometry {

@@ -1,6 +1,7 @@
 mod geometry;
 mod material;
 mod mesh;
+mod scene;
 
 use glium::glutin::surface::WindowSurface;
 use glium::texture::TextureFormat as GLTextureFormat;

@@ -6,6 +6,7 @@ edition = "2024"
 [dev-dependencies]
 anyhow = "1.0.99"
 glium = "0.36.0"
+glam = "0.30.5"
 
 [dependencies]
 nom = "^8.0.0"
