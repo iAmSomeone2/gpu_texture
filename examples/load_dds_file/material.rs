@@ -122,8 +122,8 @@ impl BasicMaterialBuilder {
 }
 
 impl MaterialBuilder for BasicMaterialBuilder {
-    const FRAG_SHADER_SRC: &'static str = include_str!("shaders/basic_mat.frag.glsl");
-    const VERT_SHADER_SRC: &'static str = include_str!("shaders/basic.vert.glsl");
+    const FRAG_SHADER_SRC: &'static str = include_str!("shaders/demo.frag.glsl");
+    const VERT_SHADER_SRC: &'static str = include_str!("shaders/demo.vert.glsl");
 
     fn build<F: ?Sized + Facade>(
         self,

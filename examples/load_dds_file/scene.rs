@@ -79,8 +79,8 @@ pub struct Scene {
     root_node: Node3D,
 }
 
-impl Scene {
-    pub fn new(width: f32, height: f32) -> Self {
-        let root_node = Node3D::new(0, None, None);
-    }
-}
+// impl Scene {
+//     pub fn new(width: f32, height: f32) -> Self {
+//         let root_node = Node3D::new(0, None, None);
+//     }
+// }

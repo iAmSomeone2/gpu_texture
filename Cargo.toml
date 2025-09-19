@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dev-dependencies]
-anyhow = "1.0.99"
+anyhow = "1.0.100"
+bytemuck = "1.23.2"
 glium = "0.36.0"
-glam = "0.30.5"
+glam = { version = "0.30.6", features = ["bytemuck"] }
 
 [dependencies]
 nom = "^8.0.0"
