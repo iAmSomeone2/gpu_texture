@@ -1,15 +1,16 @@
-#version 410 core
+#version 450 core
 precision mediump float;
 
-/** Per-instance transformation */
-layout (location = 0) in mat4 transform;
+layout (location = 0) uniform uint count;
 
-//layout (std140) uniform TransformBlock {
-//    uint count;
-//    mat4 matrix[];
-//} transforms;
+layout (std430, binding = 0) buffer InstanceData {
+    mat4 transform[];
+};
 
-layout (location = 0) out vec2 v_uv;
+out VS_OUT {
+    vec2 uv;
+    vec3 color;
+} vs_out;
 
 const vec2 pos[4] = vec2[](
 vec2(-1, -1),
@@ -26,6 +27,8 @@ vec2(1, 1)
 );
 
 void main() {
-    v_uv = uv[gl_VertexID];
-    gl_Position = transform * vec4(pos[gl_VertexID], 1.0, 1.0);
+    vs_out.uv = uv[gl_VertexID];
+    float idx_pct = gl_InstanceID / count;
+    vs_out.color = vec3(idx_pct, 0.0, 1.0);
+    gl_Position = transform[gl_InstanceID] * vec4(pos[gl_VertexID], 1.0, 1.0);
 }

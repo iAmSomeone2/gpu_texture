@@ -1,19 +1,15 @@
-#version 410 core
+#version 450 core
 precision mediump float;
 
-in vec2 v_uv;
+in VS_OUT {
+    vec2 uv;
+    vec3 color;
+} fs_in;
 
-uniform bool u_useTexture;
-uniform vec4 u_color;
 uniform sampler2D u_texture;
 
 out vec4 fragColor;
 
 void main() {
-    // Use the provided color if it's set; otherwise, sample from the texture
-    if (u_useTexture) {
-        fragColor = texture(u_texture, v_uv);
-    } else {
-        fragColor = u_color;
-    }
+    fragColor = vec4(fs_in.uv, 0.0, 1.0);
 }
