@@ -1,15 +1,18 @@
 #version 450 core
-precision mediump float;
+precision highp float;
 
 in VS_OUT {
     vec2 uv;
-    vec3 color;
 } fs_in;
 
 uniform sampler2D u_texture;
 
-out vec4 fragColor;
+out vec4 frag_color;
 
 void main() {
-    fragColor = vec4(fs_in.uv, 0.0, 1.0);
+    vec4 tex_color = texture(u_texture, fs_in.uv);
+    if (tex_color.a <= 0.01) {
+        discard;
+    }
+    frag_color = tex_color;
 }
