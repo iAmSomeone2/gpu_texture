@@ -149,7 +149,6 @@ impl VertexAttributeObject {
         unsafe {
             gl::GenVertexArrays(1, &mut id);
         }
-
         Self(id.into())
     }
 }
@@ -436,7 +435,6 @@ impl Material {
         unsafe {
             gl::UseProgram(self.program.0.into());
 
-            // gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.texture.0.into());
         }
     }
@@ -512,11 +510,69 @@ impl DemoScene {
             0.0
         };
 
-        let mesh_z =
-            (f32::cos(elapsed) * half_far_plane * 0.5) - (half_far_plane - self.near_plane);
+        let mesh_z = (f32::cos(elapsed) * half_far_plane) - (half_far_plane - self.near_plane);
         self.mesh_position.z = mesh_z;
 
         self.mesh.draw(&self.projection, &self.mesh_position);
+    }
+}
+
+struct Renderer {
+    frame_buffer: Surface<glutin::surface::WindowSurface>,
+    gl_ctx: glutin::context::NotCurrentContext,
+}
+
+impl Renderer {
+    fn new(
+        gl_ctx: glutin::context::NotCurrentContext,
+        frame_buffer: Surface<glutin::surface::WindowSurface>,
+    ) -> Self {
+        Self {
+            frame_buffer,
+            gl_ctx,
+        }
+    }
+
+    fn run(self) -> std::thread::JoinHandle<anyhow::Result<()>> {
+        std::thread::spawn(move || -> anyhow::Result<()> {
+            let gl_ctx = self.gl_ctx.make_current(&self.frame_buffer)?;
+            gl::load_with(|s| {
+                let c_s = ::std::ffi::CString::new(s).unwrap();
+                gl_ctx.display().get_proc_address(&c_s)
+            });
+            self.frame_buffer
+                .set_swap_interval(&gl_ctx, glutin::surface::SwapInterval::DontWait)?;
+
+            let mut scene = DemoScene::new(Path::new(BC3_DDS_PATH))?;
+
+            // Enable alpha blending and clear the framebuffer.
+            unsafe {
+                gl::Enable(gl::BLEND);
+                gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
+                gl::Viewport(0, 0, WINDOW_SIZE as i32, WINDOW_SIZE as i32);
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
+
+                self.frame_buffer.swap_buffers(&gl_ctx)?;
+            }
+
+            loop {
+                unsafe {
+                    gl::Clear(gl::COLOR_BUFFER_BIT);
+
+                    scene.draw();
+
+                    if gl_ctx.is_current() {
+                        self.frame_buffer
+                            .swap_buffers(&gl_ctx)
+                            .expect("Failed to swap buffers");
+                    } else {
+                        eprintln!("OpenGL context is not currently open");
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -525,9 +581,7 @@ struct App {
     did_initialize: bool,
     window: Option<Window>,
     display: Option<glutin::display::Display>,
-    scene: Option<DemoScene>,
-    frame_buffer: Option<Surface<glutin::surface::WindowSurface>>,
-    gl_ctx: Option<glutin::context::PossiblyCurrentContext>,
+    renderer_handle: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
 }
 
 impl App {
@@ -591,12 +645,12 @@ impl App {
             display.create_window_surface(&display_config, &surface_attribs)?
         };
 
-        let context = context.make_current(&frame_buffer)?;
-        gl::load_with(|s| {
-            let c_s = ::std::ffi::CString::new(s).unwrap();
-            context.display().get_proc_address(&c_s)
-        });
-        frame_buffer.set_swap_interval(&context, glutin::surface::SwapInterval::DontWait)?;
+        // let context = context.make_current(&frame_buffer)?;
+        // gl::load_with(|s| {
+        //     let c_s = ::std::ffi::CString::new(s).unwrap();
+        //     context.display().get_proc_address(&c_s)
+        // });
+        // frame_buffer.set_swap_interval(&context, glutin::surface::SwapInterval::DontWait)?;
 
         // let gl_extensions = unsafe {
         //     let mut num_extensions = 0;
@@ -612,26 +666,12 @@ impl App {
         //
         // println!("OpenGL extensions: {:#?}", gl_extensions);
 
-        // Enable alpha blending and clear the framebuffer.
-        unsafe {
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-
-            gl::Viewport(0, 0, WINDOW_SIZE as i32, WINDOW_SIZE as i32);
-            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-
-            frame_buffer.swap_buffers(&context)?;
-        }
-
-        let scene = DemoScene::new(Path::new(BC3_DDS_PATH))?;
+        let renderer = Renderer::new(context, frame_buffer);
 
         // Set all initialized values in `self`
         self.window = Some(window);
         self.display = Some(display);
-        self.frame_buffer = Some(frame_buffer);
-        self.gl_ctx = Some(context);
-        self.scene = Some(scene);
+        self.renderer_handle = Some(renderer.run());
         self.did_initialize = true;
 
         Ok(())
@@ -651,35 +691,25 @@ impl winit::application::ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        if event == WindowEvent::CloseRequested {
-            event_loop.exit();
-        }
-
-        unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-
-            if let Some(scene) = self.scene.as_mut() {
-                scene.draw();
+        match event {
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                event_loop.exit();
             }
-
-            let context = self.gl_ctx.as_ref().expect("GL Context not initialized");
-
-            if context.is_current() {
-                self.frame_buffer
-                    .as_mut()
-                    .expect("Frame buffer not initialized")
-                    .swap_buffers(context)
-                    .expect("Failed to swap buffers");
-            } else {
-                eprintln!("OpenGL context is not currently open");
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.physical_key
+                    == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape)
+                {
+                    event_loop.exit();
+                }
             }
+            _ => {}
         }
     }
 }
 
 pub fn main() -> anyhow::Result<()> {
     let event_loop = winit::event_loop::EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(1000 / 60)));
+    event_loop.set_control_flow(ControlFlow::Poll);
 
     event_loop.run_app(&mut App::default())?;
     Ok(())
