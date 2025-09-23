@@ -1,6 +1,6 @@
 //! DirectDraw Surface file handling
 
-use crate::util::{map_read_error, parse_le_u32_flags};
+use crate::file_fmt::{map_read_error, parse_le_u32_flags};
 use crate::{
     CompressedTextureFormat, GPUTexture, LoadTextureError, Loader, TextureData, TextureFormat,
 };
@@ -13,7 +13,6 @@ use nom::number::complete::{be_u32, le_u32};
 
 /// First 4 bytes of a DDS file
 const MAGIC_NUM: u32 = u32::from_be_bytes(*b"DDS ");
-// const MAGIC_NUM: u32 = 0x44445320;
 
 bitflags! {
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

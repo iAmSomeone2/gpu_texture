@@ -2,7 +2,6 @@
 pub mod api_support;
 #[cfg(feature = "dds")]
 pub mod file_fmt;
-mod util;
 
 use file_fmt::dds;
 use std::ffi::OsStr;
@@ -51,7 +50,7 @@ pub struct GPUTexture {
 
 impl GPUTexture {
     /// Loads a [GPUTexture] from a supported file at the given path
-    pub fn load_from_file(path: &Path) -> Result<GPUTexture, LoadTextureError> {
+    pub fn load_from_file(path: impl AsRef<Path>) -> Result<GPUTexture, LoadTextureError> {
         enum TextureContainer {
             /// DirectDraw Surface container format
             Dds,
@@ -60,7 +59,7 @@ impl GPUTexture {
         }
 
         // Determine the file type hint from extension and open file handle.
-        let type_hint = path
+        let type_hint = path.as_ref()
             .extension()
             .and_then(OsStr::to_str)
             .map(str::to_ascii_lowercase)
@@ -75,8 +74,7 @@ impl GPUTexture {
             match type_hint {
                 TextureContainer::Dds => dds::DDSLoader::load::<BufReader<File>>,
                 TextureContainer::Ktx => {
-                    // TODO: Replace with KTX loader fn once support is ready
-                    return Err(LoadTextureError::FileFormatNotSupported);
+                    todo!("KTX loader not yet implemented");
                 }
             }
         } else {
@@ -156,7 +154,7 @@ impl std::fmt::Display for LoadTextureError {
 impl std::error::Error for LoadTextureError {}
 
 /// Trait used
-pub trait Loader {
+pub(crate) trait Loader {
     /// Texture formats supported by the target file type
     const SUPPORTED_FORMATS: &'static [TextureFormat];
 
@@ -172,7 +170,7 @@ pub trait Loader {
     fn load<R: Read + Seek>(input: &mut R) -> Result<GPUTexture, LoadTextureError>;
 }
 
-/// All texture file extension strings (in lowercase) supported by the library features selected at build time
+/// All texture file extensions (in lowercase) supported by the library features selected at build time
 pub const SUPPORTED_FILE_EXTENSIONS: &[&str] = &[
     #[cfg(feature = "dds")]
     dds::DDSLoader::FILE_EXTENSION,

@@ -7,7 +7,7 @@ layout (location = 1) in vec2 a_uv;
 layout (location = 2) uniform mat4 u_projection;
 layout (location = 3) uniform float lut_point;
 
-layout (std430) buffer AnimLut {
+layout (std430, binding = 0) buffer AnimLut {
     float z_pos[100];
 };
 
