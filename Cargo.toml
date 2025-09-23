@@ -4,17 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [dev-dependencies]
-anyhow = "1.0.100"
-bytemuck = "1.23.2"
-gl = "0.14.0"
-glam = { version = "0.30.6", features = ["bytemuck"] }
-glutin = { version = "0.32.3", features = ["egl", "wayland"] }
+# Example program deps shared across major OSes
+anyhow = { version = "1.0.100" }
 winit = { version = "0.30.12", features = ["rwh_06"] }
 raw-window-handle = "0.6.2"
 
 [dependencies]
 nom = "^8.0.0"
 bitflags = "^2.9.3"
+
+# Optional dependencies for example programs
+[target.'cfg(target_os = "linux")'.dependencies]
+gl = { version = "0.14.0", optional = true }
+glam = { version = "0.30.7", optional = true }
+glutin = { version = "0.32.3", features = ["egl", "wayland"], optional = true }
 
 [profile.release]
 lto = "thin"
@@ -26,8 +29,13 @@ default = ["dds", "ktx"]
 dds = []
 # Khronos Texture container file support
 ktx = []
+# OpenGL utilities
+ogl = []
+
+examples = ["dep:gl", "dep:glam", "dep:glutin"]
+
 
 [[example]]
-name = "load_dds_file"
-path = "examples/load_dds_file/main.rs"
-required-features = ["dds"]
+name = "ogl"
+path = "examples/ogl/main.rs"
+required-features = ["dds", "ogl", "examples"]

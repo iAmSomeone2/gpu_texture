@@ -2,7 +2,7 @@ use gl::types::{GLint, GLuint};
 use glutin::display::GetGlDisplay;
 use glutin::prelude::*;
 use glutin::surface::Surface;
-use gpu_texture::{GPUTexture, TextureData, TextureFormat};
+use gpu_texture::{GPUTexture, TextureData};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::CStr;
 use std::marker::PhantomData;
@@ -10,7 +10,7 @@ use std::mem::offset_of;
 use std::num::NonZeroU32;
 use std::path::Path;
 use std::ptr;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use winit::{
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow},
@@ -21,23 +21,23 @@ use winit::{
 const VERTEX_SHADER: &str = include_str!("shaders/demo.vert.glsl");
 const FRAGMENT_SHADER: &str = include_str!("shaders/demo.frag.glsl");
 
-const BC3_DDS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/cd-rw.dds");
+const BC3_DDS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/awesomeface.dds");
 
 const WINDOW_SIZE: u32 = 1280;
 
 /// OpenGL ID
 #[derive(Debug, Copy, Clone)]
-struct GLId(u32);
+struct GlId(u32);
 
-impl From<GLId> for u32 {
-    fn from(id: GLId) -> Self {
+impl From<GlId> for u32 {
+    fn from(id: GlId) -> Self {
         id.0
     }
 }
 
-impl From<u32> for GLId {
+impl From<u32> for GlId {
     fn from(value: u32) -> Self {
-        GLId(value)
+        GlId(value)
     }
 }
 
@@ -67,8 +67,9 @@ trait GlUnbind {
 }
 
 pub struct Buffer<T: Sized> {
+    /// PhantomData marker for type safety
     _type: PhantomData<T>,
-    id: GLId,
+    id: GlId,
     buf_type: gl::types::GLenum,
     /// Number of items in the buffer
     count: usize,
@@ -109,8 +110,7 @@ impl<T> Buffer<T> {
     pub fn new_storage(data: &[T], gl_buf_type: gl::types::GLenum) -> Self {
         let mut buffer = Buffer::<T>::create(gl_buf_type);
         buffer.count = data.len();
-        let data_size = std::mem::size_of_val(data);
-        // let data: &[u8] = bytemuck::cast_slice(data);
+        let data_size = size_of_val(data);
         unsafe {
             gl::NamedBufferStorage(
                 buffer.id.into(),
@@ -124,7 +124,7 @@ impl<T> Buffer<T> {
     }
 }
 
-struct VertexAttributeObject(GLId);
+struct VertexAttributeObject(GlId);
 
 impl GlBind<'_> for VertexAttributeObject {
     fn bind(&'_ self) -> GlBindHandle<'_, Self> {
@@ -153,7 +153,53 @@ impl VertexAttributeObject {
     }
 }
 
-struct CompressedTexture2d(GLId);
+struct Texture1d(GlId);
+
+impl Drop for Texture1d {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteTextures(1, &(self.0.into()));
+        }
+    }
+}
+
+impl From<&[f32]> for Texture1d {
+    fn from(data: &[f32]) -> Self {
+        let mut id = 0u32;
+        unsafe {
+            gl::GenTextures(1, &mut id);
+            gl::BindTexture(gl::TEXTURE_1D, id);
+            gl::TexParameteri(
+                gl::TEXTURE_1D,
+                gl::TEXTURE_WRAP_S,
+                gl::CLAMP_TO_BORDER as i32,
+            );
+            gl::TexParameteri(
+                gl::TEXTURE_1D,
+                gl::TEXTURE_WRAP_T,
+                gl::CLAMP_TO_BORDER as i32,
+            );
+            gl::TexParameteri(gl::TEXTURE_1D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_1D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+
+            gl::TexImage1D(
+                gl::TEXTURE_1D,
+                0,
+                gl::R32F as i32,
+                data.len() as i32,
+                0,
+                gl::RED,
+                gl::FLOAT,
+                data.as_ptr() as *const _,
+            );
+            gl::BindTexture(gl::TEXTURE_1D, 0);
+        }
+
+        Self(id.into())
+    }
+}
+
+struct CompressedTexture2d(GlId);
 
 impl Drop for CompressedTexture2d {
     fn drop(&mut self) {
@@ -167,25 +213,7 @@ impl TryFrom<GPUTexture> for CompressedTexture2d {
     type Error = anyhow::Error;
 
     fn try_from(value: GPUTexture) -> Result<Self, Self::Error> {
-        // TODO: Move this logic into the library
-        let compression_fmt = match value.format {
-            TextureFormat::Compressed(format) => match format {
-                gpu_texture::CompressedTextureFormat::BC1 => 0x83F0,
-                gpu_texture::CompressedTextureFormat::BC1A => 0x83F1,
-                gpu_texture::CompressedTextureFormat::BC2 => 0x83F2,
-                gpu_texture::CompressedTextureFormat::BC3 => 0x83F3,
-            },
-            _ => {
-                return Err(anyhow::anyhow!("Only compressed texture formats supported"));
-            }
-        };
-
-        // TODO: add this as a feature in the library
-        // let image_count = value
-        //     .mip_maps
-        //     .as_ref()
-        //     .map(|mips| mips.len() + 1)
-        //     .unwrap_or(1);
+        let compression_fmt = value.format.try_into_ogl_enum()?;
 
         // Generate texture and bind it
         let mut tex_id = 0u32;
@@ -201,7 +229,11 @@ impl TryFrom<GPUTexture> for CompressedTexture2d {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(
+                gl::TEXTURE_2D,
+                gl::TEXTURE_MIN_FILTER,
+                gl::LINEAR_MIPMAP_LINEAR as i32, // Linearly interpolate between mip levels and texels in each level
+            );
             gl::CompressedTexImage2D(
                 gl::TEXTURE_2D,
                 level,
@@ -232,7 +264,7 @@ impl TryFrom<GPUTexture> for CompressedTexture2d {
     }
 }
 
-struct GlProgram(GLId);
+struct GlProgram(GlId);
 
 impl Drop for GlProgram {
     fn drop(&mut self) {
@@ -315,8 +347,11 @@ impl GlProgram {
 #[repr(C, align(4))]
 #[derive(Clone, Copy, Debug)]
 struct Vertex {
+    /// Padding to align with OpenGL's 4-byte boundary
     _pad: [u8; 4],
+    /// 3D position
     position: glam::Vec3,
+    /// 2D texture coordinates
     tex_coords: glam::Vec2,
 }
 
@@ -367,13 +402,13 @@ impl Geometry {
     fn new_plane() -> Self {
         const VERTICES: [Vertex; 4] = [
             // Front face (lower-left)
-            Vertex::new([-1.0, -1.0, 0.0], [0.0, 0.0]),
+            Vertex::new([-1.0, -1.0, 0.0], [0.0, 1.0]),
             // Front face (lower-right)
-            Vertex::new([1.0, -1.0, 0.0], [1.0, 0.0]),
+            Vertex::new([1.0, -1.0, 0.0], [1.0, 1.0]),
             // Front face (upper-left)
-            Vertex::new([-1.0, 1.0, 0.0], [0.0, 1.0]),
+            Vertex::new([-1.0, 1.0, 0.0], [0.0, 0.0]),
             // Front face (upper-right)
-            Vertex::new([1.0, 1.0, 0.0], [1.0, 1.0]),
+            Vertex::new([1.0, 1.0, 0.0], [1.0, 0.0]),
         ];
 
         const INDICES: [u16; 6] = [0, 1, 2, 2, 1, 3];
@@ -435,6 +470,7 @@ impl Material {
         unsafe {
             gl::UseProgram(self.program.0.into());
 
+            gl::ActiveTexture(gl::TEXTURE1);
             gl::BindTexture(gl::TEXTURE_2D, self.texture.0.into());
         }
     }
@@ -457,23 +493,41 @@ impl Mesh {
     fn draw<P: Into<glam::Vec3> + Copy>(&self, projection: &glam::Mat4, position: &P) {
         self.material.apply();
 
-        let transform = glam::Mat4::from_translation((*position).into());
+        // let transform = glam::Mat4::from_translation((*position).into());
 
         unsafe {
             let projection_ptr = &raw const (*projection);
-            let transform_ptr = &raw const transform;
+            // let transform_ptr = &raw const transform;
 
             gl::UniformMatrix4fv(2, 1, gl::FALSE, projection_ptr as *const _);
-            gl::UniformMatrix4fv(3, 1, gl::FALSE, transform_ptr as *const _);
+            // gl::UniformMatrix4fv(3, 1, gl::FALSE, transform_ptr as *const _);
         }
 
         self.geometry.draw();
     }
 }
 
+fn generate_animation_lut<const STEPS: usize>(min: f32, max: f32) -> [f32; STEPS] {
+    let step_size = (std::f32::consts::PI * 2.0) / STEPS as f32;
+
+    let mut lut = [0.0; STEPS];
+    let range = max - min;
+    let midpoint = (max + min) * 0.5;
+    let scale = range * 0.5;
+
+    for (i, item) in lut.iter_mut().enumerate() {
+        let t = i as f32 * step_size;
+        *item = (-f32::cos(t) * scale) + midpoint;
+    }
+
+    lut
+}
+
 struct DemoScene {
     projection: glam::Mat4,
     mesh: Mesh,
+    anim_lut_size: usize,
+    anim_lut_buf: Buffer<f32>,
     mesh_position: glam::Vec3A,
     start_instant: Option<Instant>,
     near_plane: f32,
@@ -491,11 +545,16 @@ impl DemoScene {
 
         let mesh = Mesh::new_textured_plane(gpu_texture)?;
 
+        let anim_lut = generate_animation_lut::<100>(near_plane + 1.0, far_plane - 1.0);
+        let anim_lut_buf = Buffer::new_storage(&anim_lut, gl::SHADER_STORAGE_BUFFER);
+
         Ok(Self {
             projection: projection_mat,
             mesh,
             mesh_position: glam::Vec3A::ZERO,
             start_instant: None,
+            anim_lut_size: 100,
+            anim_lut_buf,
             near_plane,
             far_plane,
         })
@@ -509,9 +568,20 @@ impl DemoScene {
             self.start_instant = Some(Instant::now());
             0.0
         };
+        let anim_sample_point: f32 = {
+            let raw_point = elapsed % self.anim_lut_size as f32;
+            raw_point / self.anim_lut_size as f32
+        };
+        debug_assert!((0.0..=1.0).contains(&anim_sample_point));
 
-        let mesh_z = (f32::cos(elapsed) * half_far_plane) - (half_far_plane - self.near_plane);
-        self.mesh_position.z = mesh_z;
+        // let mesh_z = ((-f32::cos(elapsed) * half_far_plane) - (half_far_plane + 3.0))
+        //     .min(self.far_plane - 1.0);
+        // self.mesh_position.z = mesh_z;
+
+        let _lut_handle = self.anim_lut_buf.bind();
+        unsafe {
+            gl::Uniform1f(3, anim_sample_point);
+        }
 
         self.mesh.draw(&self.projection, &self.mesh_position);
     }
@@ -533,15 +603,20 @@ impl Renderer {
         }
     }
 
-    fn run(self) -> std::thread::JoinHandle<anyhow::Result<()>> {
+    fn run(
+        self,
+        shutdown_receiver: std::sync::mpsc::Receiver<()>,
+    ) -> std::thread::JoinHandle<anyhow::Result<()>> {
         std::thread::spawn(move || -> anyhow::Result<()> {
             let gl_ctx = self.gl_ctx.make_current(&self.frame_buffer)?;
             gl::load_with(|s| {
                 let c_s = ::std::ffi::CString::new(s).unwrap();
                 gl_ctx.display().get_proc_address(&c_s)
             });
-            self.frame_buffer
-                .set_swap_interval(&gl_ctx, glutin::surface::SwapInterval::DontWait)?;
+            self.frame_buffer.set_swap_interval(
+                &gl_ctx,
+                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            )?;
 
             let mut scene = DemoScene::new(Path::new(BC3_DDS_PATH))?;
 
@@ -557,21 +632,30 @@ impl Renderer {
                 self.frame_buffer.swap_buffers(&gl_ctx)?;
             }
 
-            loop {
+            'render: loop {
+                match shutdown_receiver.try_recv() {
+                    Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        println!("Shutting down render thread...");
+                        break 'render;
+                    }
+                    _ => {}
+                }
+
                 unsafe {
+                    if !gl_ctx.is_current() {
+                        eprintln!("OpenGL context is not current! Skipping frame...");
+                        continue 'render;
+                    }
                     gl::Clear(gl::COLOR_BUFFER_BIT);
 
                     scene.draw();
 
-                    if gl_ctx.is_current() {
-                        self.frame_buffer
-                            .swap_buffers(&gl_ctx)
-                            .expect("Failed to swap buffers");
-                    } else {
-                        eprintln!("OpenGL context is not currently open");
-                    }
+                    self.frame_buffer
+                        .swap_buffers(&gl_ctx)
+                        .expect("Failed to swap buffers");
                 }
             }
+            Ok(())
         })
     }
 }
@@ -581,6 +665,7 @@ struct App {
     did_initialize: bool,
     window: Option<Window>,
     display: Option<glutin::display::Display>,
+    shutdown_sender: Option<std::sync::mpsc::Sender<()>>,
     renderer_handle: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
 }
 
@@ -588,7 +673,7 @@ impl App {
     fn initialize(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
         let window = {
             let window_attribs = winit::window::WindowAttributes::default()
-                .with_title("Example: Load DDS File")
+                .with_title("Example: OpenGL")
                 .with_inner_size(winit::dpi::LogicalSize::new(WINDOW_SIZE, WINDOW_SIZE))
                 .with_resizable(false)
                 .with_enabled_buttons(
@@ -645,33 +730,14 @@ impl App {
             display.create_window_surface(&display_config, &surface_attribs)?
         };
 
-        // let context = context.make_current(&frame_buffer)?;
-        // gl::load_with(|s| {
-        //     let c_s = ::std::ffi::CString::new(s).unwrap();
-        //     context.display().get_proc_address(&c_s)
-        // });
-        // frame_buffer.set_swap_interval(&context, glutin::surface::SwapInterval::DontWait)?;
-
-        // let gl_extensions = unsafe {
-        //     let mut num_extensions = 0;
-        //     gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_extensions);
-        //
-        //     let mut extensions = Vec::with_capacity(num_extensions as usize);
-        //     for i in (0..num_extensions as u32) {
-        //         let ext_name = gl::GetStringi(gl::EXTENSIONS, i);
-        //         extensions.push(CStr::from_ptr(ext_name as *const _).to_str()?.to_owned());
-        //     }
-        //     extensions
-        // };
-        //
-        // println!("OpenGL extensions: {:#?}", gl_extensions);
-
         let renderer = Renderer::new(context, frame_buffer);
+        let (shutdown_sender, shutdown_receiver) = std::sync::mpsc::channel();
 
         // Set all initialized values in `self`
         self.window = Some(window);
         self.display = Some(display);
-        self.renderer_handle = Some(renderer.run());
+        self.shutdown_sender = Some(shutdown_sender);
+        self.renderer_handle = Some(renderer.run(shutdown_receiver));
         self.did_initialize = true;
 
         Ok(())
@@ -691,15 +757,21 @@ impl winit::application::ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        let shutdown = || {
+            println!("Shutdown event received...");
+            self.shutdown_sender.as_ref().unwrap().send(()).unwrap();
+            event_loop.exit();
+        };
+
         match event {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                event_loop.exit();
+                shutdown();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.physical_key
                     == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape)
                 {
-                    event_loop.exit();
+                    shutdown();
                 }
             }
             _ => {}
@@ -711,6 +783,9 @@ pub fn main() -> anyhow::Result<()> {
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    event_loop.run_app(&mut App::default())?;
+    let mut app = App::default();
+
+    event_loop.run_app(&mut app)?;
+    app.renderer_handle.take().map(|handle| handle.join());
     Ok(())
 }
