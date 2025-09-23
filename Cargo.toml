@@ -28,7 +28,7 @@ default = ["dds", "ktx"]
 # DirectDraw Surface container file support
 dds = []
 # Khronos Texture container file support
-ktx = []
+ktx = ["ogl"]
 # OpenGL utilities
 ogl = []
 

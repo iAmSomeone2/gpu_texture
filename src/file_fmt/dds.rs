@@ -2,7 +2,8 @@
 
 use crate::file_fmt::{map_read_error, parse_le_u32_flags};
 use crate::{
-    CompressedTextureFormat, GPUTexture, LoadTextureError, Loader, TextureData, TextureFormat,
+    CompressedTextureFormat, Dimensionality, GPUTexture, LoadTextureError, Loader, TextureData,
+    TextureFormat,
 };
 use std::io::{Read, Seek};
 
@@ -359,8 +360,7 @@ impl DDSHeader {
 
         Ok(TextureData {
             img_buffer,
-            width,
-            height,
+            dimensionality: Dimensionality::Two { width, height },
         })
     }
 
@@ -388,8 +388,10 @@ impl DDSHeader {
 
         let main_texture = TextureData {
             img_buffer,
-            width: self.width,
-            height: self.height,
+            dimensionality: Dimensionality::Two {
+                width: self.width,
+                height: self.height,
+            },
         };
 
         if mip_count == 0 {

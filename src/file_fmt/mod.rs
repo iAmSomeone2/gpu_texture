@@ -2,13 +2,15 @@
 //!
 //! File formats supported by GPUTexture
 
+use crate::{LoadTextureError, NeededBytes};
 use nom::IResult;
 use nom::number::complete::le_u32;
-use crate::{LoadTextureError, NeededBytes};
 
 #[cfg(feature = "dds")]
 pub mod dds;
-mod ktx;
+
+#[cfg(feature = "ktx")]
+pub mod ktx;
 
 /// Parses a little-endian formatted u32 value from the provided input data and creates the matching
 /// bitflag struct from it.

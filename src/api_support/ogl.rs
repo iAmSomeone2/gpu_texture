@@ -6,7 +6,7 @@
 //!
 //! - This module **does not** depend on nor makes any assumptions about the OpenGL version used at runtime.
 //! - This module **does** assume that raw OpenGL is the target library. Wrapper libraries, such as glium, often use
-//!   their own wrapping data types and are likely to be incompatible with this module.
+//!   their own wrapping data types & enums that are likely to be incompatible with this module.
 
 use crate::api_support::{GraphicsAPI, UnsupportedTextureFormatError};
 use crate::{CompressedTextureFormat, TextureFormat};

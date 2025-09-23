@@ -1,6 +1,6 @@
 #[cfg(feature = "ogl")] // TODO: Use the `any` selector once support for more APIs has been added.
 pub mod api_support;
-#[cfg(feature = "dds")]
+#[cfg(any(feature = "dds", feature = "ktx"))]
 pub mod file_fmt;
 
 use file_fmt::dds;
@@ -31,11 +31,95 @@ pub enum TextureFormat {
     Compressed(CompressedTextureFormat),
 }
 
+/// Represents the dimensionality of a [GPUTexture].
+///
+/// The `Dimensionality` enum is used to specify the dimensions
+/// the [GPUTexture] exists in. It provides three variants: `One`, `Two`,
+/// and `Three` to distinguish between one-dimensional, two-dimensional,
+/// and three-dimensional spaces respectively.
+///
+/// # Variants
+///
+/// * `One` - Represents a one-dimensional space (e.g., a lookup table texture).
+/// * `Two` - Represents a two-dimensional space (e.g., standard image, normal map).
+/// * `Three` - Represents a three-dimensional space (e.g., volumetric data).
+///
+/// # Traits
+///
+/// This enum derives the following traits:
+/// - `Debug`: Allows formatting for debugging purposes.
+/// - `Clone`: Enables the enum to be cloned, duplicating its values.
+/// - `PartialEq`: Enables comparison of two `Dimensionality` values for equality.
+/// - `Eq`: Ensures strict equality comparisons can be performed on `Dimensionality`.
+///
+/// # Example
+/// ```
+/// use gpu_texture::Dimensionality;
+///
+/// let dim = Dimensionality::Two{ width: 1024, height: 1024 };
+/// assert_eq!(dim, Dimensionality::Two{ width: 1024, height: 1024 });
+/// println!("{:?}", dim); // Output: Two { width: 1024, height: 1024 }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Dimensionality {
+    One { width: u32 },
+    Two { width: u32, height: u32 },
+    Three { width: u32, height: u32, depth: u32 },
+}
+
+impl Dimensionality {
+    /// Get the `width` (in texels) of the texture.
+    #[inline]
+    pub fn width(&self) -> u32 {
+        match self {
+            Dimensionality::One { width } => *width,
+            Dimensionality::Two { width, .. } => *width,
+            Dimensionality::Three { width, .. } => *width,
+        }
+    }
+
+    /// Get the `height` (in texels) of the texture.
+    #[inline]
+    pub fn height(&self) -> u32 {
+        match self {
+            Dimensionality::One { .. } => 0,
+            Dimensionality::Two { height, .. } => *height,
+            Dimensionality::Three { height, .. } => *height,
+        }
+    }
+
+    /// Get the `depth` (in texels) of the texture.
+    #[inline]
+    pub fn depth(&self) -> u32 {
+        match self {
+            Dimensionality::One { .. } => 0,
+            Dimensionality::Two { .. } => 0,
+            Dimensionality::Three { depth, .. } => *depth,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextureData {
-    pub width: u32,
-    pub height: u32,
+    pub dimensionality: Dimensionality,
     pub img_buffer: Vec<u8>,
+}
+
+impl TextureData {
+    #[inline]
+    pub fn width(&self) -> u32 {
+        self.dimensionality.width()
+    }
+
+    #[inline]
+    pub fn height(&self) -> u32 {
+        self.dimensionality.height()
+    }
+
+    #[inline]
+    pub fn depth(&self) -> u32 {
+        self.dimensionality.depth()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +143,8 @@ impl GPUTexture {
         }
 
         // Determine the file type hint from extension and open file handle.
-        let type_hint = path.as_ref()
+        let type_hint = path
+            .as_ref()
             .extension()
             .and_then(OsStr::to_str)
             .map(str::to_ascii_lowercase)
@@ -126,8 +211,14 @@ pub enum LoadTextureError {
     TextureFormatNotSupported(&'static [TextureFormat]),
     Incomplete(NeededBytes),
     InvalidData(nom::error::ErrorKind),
-    InvalidSize { expected: usize, actual: usize },
+    InvalidSize {
+        expected: usize,
+        actual: usize,
+    },
+    /// Wraps a std::io::Error in the event that a file cannot be read
     IO(std::io::Error),
+    /// File was detected as a supported format but contains corrupted data
+    CorruptedData,
 }
 
 impl std::fmt::Display for LoadTextureError {
@@ -147,6 +238,7 @@ impl std::fmt::Display for LoadTextureError {
                 write!(f, "Invalid size {actual} bytes, expected {expected} bytes")
             }
             Self::IO(e) => write!(f, "IO error: {e}"),
+            Self::CorruptedData => write!(f, "File contains corrupted data"),
         }
     }
 }
