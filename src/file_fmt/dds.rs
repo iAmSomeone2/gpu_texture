@@ -478,7 +478,7 @@ mod test {
 
     static TEST_DDS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
         PathBuf::from(ASSETS_DIR)
-            .join("cd-rw.dds")
+            .join("awesomeface.dds")
             .canonicalize()
             .unwrap()
     });

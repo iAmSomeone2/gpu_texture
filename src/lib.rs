@@ -1,7 +1,10 @@
+#[cfg(feature = "ogl")] // TODO: Use the `any` selector once support for more APIs has been added.
+pub mod api_support;
 #[cfg(feature = "dds")]
-mod dds;
+pub mod file_fmt;
 mod util;
 
+use file_fmt::dds;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
@@ -84,6 +87,15 @@ impl GPUTexture {
 
         loader_fn(&mut tex_file_buf)
     }
+
+    /// Returns the total number of all textures loaded (1 + mip levels)
+    pub fn texture_count(&self) -> usize {
+        if let Some(mip_maps) = self.mip_maps.as_ref() {
+            mip_maps.len() + 1
+        } else {
+            1
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -164,4 +176,6 @@ pub trait Loader {
 pub const SUPPORTED_FILE_EXTENSIONS: &[&str] = &[
     #[cfg(feature = "dds")]
     dds::DDSLoader::FILE_EXTENSION,
+    // #[cfg(feature = "ktx")]
+    // ktx::KTXLoader::FILE_EXTENSION,
 ];
