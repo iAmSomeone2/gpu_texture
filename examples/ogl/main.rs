@@ -1,3 +1,11 @@
+//! # OpenGL Example Renderer
+//!
+//! This example demonstrates how to use the gpu_texture crate to load and render a compressed texture in a simple, but non-trivial,
+//! renderer using OpenGL 4.6.
+//!
+//! ## Author
+//! Brenden Davidson <brenden@bdavidson.dev>
+
 use anyhow::anyhow;
 use gl::types::{GLint, GLuint};
 use glutin::display::GetGlDisplay;
@@ -236,7 +244,7 @@ impl VertexAttributeObject {
 
 struct Texture {
     id: GlId,
-    gl_type: gl::types::GLenum,
+    _gl_type: gl::types::GLenum,
 }
 
 impl Drop for Texture {
@@ -259,7 +267,7 @@ impl Texture {
         }
         Ok(Self {
             id: id[0].into(),
-            gl_type: gl_texture_type,
+            _gl_type: gl_texture_type,
         })
     }
 
@@ -468,7 +476,7 @@ impl GlProgram {
     }
 }
 
-#[repr(C, align(4))]
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct Vertex {
     /// Padding to align with OpenGL's 4-byte boundary
@@ -762,10 +770,10 @@ impl Renderer {
                 gl_ctx.display().get_proc_address(&c_s)
             });
 
-            if let Err(err) = self.frame_buffer.set_swap_interval(
-                &gl_ctx,
-                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
-            ) {
+            if let Err(err) = self
+                .frame_buffer
+                .set_swap_interval(&gl_ctx, glutin::surface::SwapInterval::DontWait)
+            {
                 return err_handler(anyhow::Error::new(err));
             }
 

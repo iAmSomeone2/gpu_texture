@@ -3,25 +3,20 @@ name = "gpu_texture"
 version = "0.1.0"
 edition = "2024"
 
-[dev-dependencies]
-# Example program deps shared across major OSes
-anyhow = { version = "1.0.100" }
-winit = { version = "0.30.12", features = ["rwh_06"] }
-raw-window-handle = "0.6.2"
-
 [dependencies]
 nom = "^8.0.0"
 bitflags = "^2.9.3"
+
+# Example program deps shared across major OSes
+anyhow = { version = "1.0.100", optional = true }
+winit = { version = "0.30.12", features = ["rwh_06"], optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
 
 # Optional dependencies for example programs
 [target.'cfg(target_os = "linux")'.dependencies]
 gl = { version = "0.14.0", optional = true }
 glam = { version = "0.30.7", optional = true }
 glutin = { version = "0.32.3", features = ["egl", "wayland"], optional = true }
-
-[profile.release]
-lto = "thin"
-codegen-units = 1
 
 [features]
 default = ["dds", "ktx"]
@@ -31,8 +26,8 @@ dds = []
 ktx = ["ogl"]
 # OpenGL utilities
 ogl = []
-
-examples = ["dep:gl", "dep:glam", "dep:glutin"]
+# Dependencies required for examples
+examples = ["dep:gl", "dep:glam", "dep:glutin", "dep:anyhow", "dep:winit", "dep:raw-window-handle"]
 
 
 [[example]]
