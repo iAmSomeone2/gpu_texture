@@ -507,8 +507,6 @@ mod test {
 
         let parse_header_result = DDSHeader::parse(&test_data[4..]);
         assert!(parse_header_result.is_ok());
-        let (_rem, header) = parse_header_result.unwrap();
-        println!("{:?}", header);
     }
 
     #[test]
